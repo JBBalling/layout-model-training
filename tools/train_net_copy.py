@@ -13,7 +13,7 @@ from detectron2.config import get_cfg
 from detectron2.data import DatasetMapper, build_detection_train_loader
 
 from detectron2.data.datasets import register_coco_instances
-
+from fvcore.common.checkpoint import Checkpointer
 from detectron2.engine import (
     DefaultTrainer,
     default_argument_parser,
@@ -132,8 +132,11 @@ def setup(args):
 
     cfg.DATASETS.TRAIN = (f"{args.dataset_name}-train",)
     cfg.DATASETS.TEST = (f"{args.dataset_name}-val",)
-    cfg.freeze()
+    # cfg.freeze()
     default_setup(cfg, args)
+    # dumped_config_file = args.config_file.replace(".yaml", "").join("-final.yaml")
+    # with open(dumped_config_file, "w") as f:
+    #     f.write(cfg.dump())
     return cfg
 
 
@@ -153,7 +156,6 @@ def main(args):
         args.image_path_val
     )
     cfg = setup(args)
-
     if args.eval_only:
         model = Trainer.build_model(cfg)
         DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
@@ -172,17 +174,24 @@ def main(args):
 
     # Ensure that the Output directory exists
     os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
-
+    best_path = cfg.OUTPUT_DIR + "/best"
+    os.makedirs(best_path, exist_ok=True)
     """
     If you'd like to do anything fancier than the standard training logic,
     consider writing your own training loop (see plain_train_net.py) or
     subclassing the trainer.
     """
+    if args.resume:
+        model = Trainer.build_model(cfg)
+        DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
+            cfg.MODEL.WEIGHTS
+        )
+
     trainer = Trainer(cfg)
-    trainer.resume_or_load(resume=args.resume)
+    trainer.resume_or_load(args.resume)
     trainer.register_hooks(
-        [hooks.EvalHook(1000, lambda: trainer.eval_and_save(cfg, trainer.model))]
-    )
+        [hooks.EvalHook(2000, lambda: trainer.eval_and_save(cfg, trainer.model)), hooks.BestCheckpointer(2000,  Checkpointer(trainer.model, best_path), "bbox/AP50")])
+
     if cfg.TEST.AUG.ENABLED:
         trainer.register_hooks(
             [hooks.EvalHook(1000, lambda: trainer.test_with_TTA(cfg, trainer.model))]
@@ -213,6 +222,7 @@ if __name__ == "__main__":
         "--image_path_val",
         help="The path to the validation set image folder",
     )
+    parser.add_argument("--model_weights", required=False, help="The model weights to finetune from.")
     args = parser.parse_args()
     print("Command Line Args:", args)
 

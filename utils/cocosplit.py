@@ -65,8 +65,9 @@ def main(
     tr_ann, ts_ann = train_test_split(
         img_ann, train_size=split_ratio, random_state=random_state
     )
-
+    print(len(tr_ann), len(ts_ann))
     img_wo_ann = funcy.lremove(lambda i: i["id"] in ids_with_annotations, images)
+    print(img_wo_ann)
     if len(img_wo_ann) > 0:
         tr_wo_ann, ts_wo_ann = train_test_split(
             img_wo_ann, train_size=split_ratio, random_state=random_state
